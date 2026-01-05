@@ -55,16 +55,15 @@ def health():
 def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, application.bot)
-    asyncio.get_event_loop().create_task(application.process_update(update))
+    asyncio.create_task(application.process_update(update))
     return "ok", 200
 
 # ===== STARTUP =====
-async def setup():
-    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+async def startup():
     await application.initialize()
+    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
     await application.start()
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.create_task(setup())
+    asyncio.run(startup())
     flask_app.run(host="0.0.0.0", port=10000)
