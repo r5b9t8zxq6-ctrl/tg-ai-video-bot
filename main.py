@@ -59,4 +59,13 @@ def webhook():
     return "ok", 200
 
 # ===== STARTUP =====
-if __name__
+if __name__ == "__main__":
+    import asyncio
+
+    async def startup():
+        await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+        await tg_app.initialize()
+        await tg_app.start()
+
+    asyncio.run(startup())
+    flask_app.run(host="0.0.0.0", port=10000)
