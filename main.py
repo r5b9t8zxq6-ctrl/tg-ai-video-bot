@@ -1,6 +1,5 @@
 import os
 import asyncio
-import threading
 import replicate
 from flask import Flask, request
 from telegram import Update
@@ -18,10 +17,6 @@ REPLICATE_API_TOKEN = os.environ["REPLICATE_API_TOKEN"]
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
-
-# ===== EVENT LOOP =====
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
 
 # ===== TELEGRAM APP =====
 application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -42,13 +37,10 @@ async def generate_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             input={"prompt": prompt}
         )[0]
 
-        output = replicate.run(
-    "stability-ai/stable-video-diffusion",
-    input={
-        "prompt": prompt,
-        "num_frames": 14
-    }
-)
+        video = replicate.run(
+            "stability-ai/stable-video-diffusion",
+            input={"input_image": image}
+        )[0]
 
         await update.message.reply_video(video=video)
 
@@ -68,33 +60,10 @@ def health():
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-
-    asyncio.run_coroutine_threadsafe(
-        application.process_update(update),
-        loop
-    )
-
+    asyncio.run(application.process_update(update))
     return "ok", 200
 
-# ===== STARTUP =====
-async def startup():
-    await application.initialize()
-    await application.bot.set_webhook(WEBHOOK_URL)
-
-def start_loop():
-    loop.run_forever()
-
-def main():
-    # запускаем event loop в отдельном потоке
-    threading.Thread(target=start_loop, daemon=True).start()
-
-    # инициализация telegram
-    loop.call_soon_threadsafe(
-        lambda: asyncio.create_task(startup())
-    )
-
-    # запускаем flask
-    flask_app.run(host="0.0.0.0", port=10000)
-
+# ===== START =====
 if __name__ == "__main__":
-    main()
+    asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
+    flask_app.run(host="0.0.0.0", port=10000)
