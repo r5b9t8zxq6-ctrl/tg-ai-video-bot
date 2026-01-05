@@ -33,23 +33,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def generate_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = update.message.text
-    await update.message.reply_text("⏳ Генерирую видео, подожди...")
+    await update.message.reply_text("⏳ Генерирую видео, подожди (≈1–2 мин)…")
 
     try:
-        image = replicate.run(
-            "stability-ai/stable-diffusion",
-            input={"prompt": prompt}
-        )[0]
+        loop = asyncio.get_running_loop()
 
-        video = replicate.run(
-            "stability-ai/stable-video-diffusion",
-            input={"input_image": image}
-        )[0]
+        def generate():
+            output = replicate.run(
+                "stability-ai/stable-video-diffusion",
+                input={
+                    "prompt": prompt,
+                    "num_frames": 14
+                }
+            )
+            return output[0]
 
-        await update.message.reply_video(video=video)
+        video_url = await loop.run_in_executor(None, generate)
+
+        await update.message.reply_video(video=video_url)
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {e}")
+        await update.message.reply_text(f"❌ Ошибка генерации:\n{e}")
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_video))
