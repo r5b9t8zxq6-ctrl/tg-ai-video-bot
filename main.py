@@ -1,4 +1,5 @@
 import os
+import asyncio
 import replicate
 from flask import Flask, request
 from telegram import Update, Bot
@@ -19,7 +20,6 @@ os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
 
 # ===== TELEGRAM =====
 bot = Bot(token=TELEGRAM_TOKEN)
-
 tg_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # ===== HANDLERS =====
@@ -59,13 +59,15 @@ def webhook():
     return "ok", 200
 
 # ===== STARTUP =====
-if __name__ == "__main__":
-    import asyncio
+async def telegram_startup():
+    await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+    await tg_app.initialize()
+    await tg_app.start()
 
-    async def startup():
-        await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
-        await tg_app.initialize()
-        await tg_app.start()
-
-    asyncio.run(startup())
+def run():
+    loop = asyncio.get_event_loop()
+    loop.create_task(telegram_startup())
     flask_app.run(host="0.0.0.0", port=10000)
+
+if __name__ == "__main__":
+    run()
