@@ -1,8 +1,7 @@
 import os
-import asyncio
 import replicate
 from flask import Flask, request
-from telegram import Update
+from telegram import Bot, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -18,8 +17,9 @@ WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
 
-# ===== TELEGRAM APP =====
+# ===== TELEGRAM =====
 application = Application.builder().token(TELEGRAM_TOKEN).build()
+bot = Bot(TELEGRAM_TOKEN)
 
 # ===== HANDLERS =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -33,13 +33,16 @@ async def generate_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         image = replicate.run(
-            "stability-ai/stable-diffusion",
+            "stability-ai/sdxl",
             input={"prompt": prompt}
         )[0]
 
         video = replicate.run(
-            "stability-ai/stable-video-diffusion",
-            input={"input_image": image}
+            "stability-ai/stable-video-diffusion-img2vid",
+            input={
+                "input_image": image,
+                "num_frames": 14
+            }
         )[0]
 
         await update.message.reply_video(video=video)
@@ -48,7 +51,9 @@ async def generate_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
 application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_video))
+application.add_handler(
+    MessageHandler(filters.TEXT & ~filters.COMMAND, generate_video)
+)
 
 # ===== FLASK =====
 flask_app = Flask(__name__)
@@ -58,12 +63,13 @@ def health():
     return "OK", 200
 
 @flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run(application.process_update(update))
+async def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    await application.process_update(update)
     return "ok", 200
 
 # ===== START =====
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
     flask_app.run(host="0.0.0.0", port=10000)
