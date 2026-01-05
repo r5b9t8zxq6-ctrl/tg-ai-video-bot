@@ -2,7 +2,6 @@ import os
 import asyncio
 import replicate
 from flask import Flask, request
-
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -12,21 +11,17 @@ from telegram.ext import (
     filters,
 )
 
-# ========= ENV =========
+# ===== ENV =====
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 REPLICATE_API_TOKEN = os.environ["REPLICATE_API_TOKEN"]
-WEBHOOK_URL = os.environ["WEBHOOK_URL"]  # https://xxx.onrender.com/webhook
+WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
 
-# ========= EVENT LOOP =========
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
-# ========= TELEGRAM =========
+# ===== TELEGRAM APP =====
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-# ========= HANDLERS =========
+# ===== HANDLERS =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎥 Напиши описание сцены — я сгенерирую ИИ-видео"
@@ -53,11 +48,9 @@ async def generate_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
 application.add_handler(CommandHandler("start", start))
-application.add_handler(
-    MessageHandler(filters.TEXT & ~filters.COMMAND, generate_video)
-)
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_video))
 
-# ========= FLASK =========
+# ===== FLASK =====
 flask_app = Flask(__name__)
 
 @flask_app.route("/", methods=["GET"])
@@ -66,24 +59,11 @@ def health():
 
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
-
-    asyncio.run_coroutine_threadsafe(
-        application.process_update(update),
-        loop
-    )
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    asyncio.run(application.process_update(update))
     return "ok", 200
 
-# ========= STARTUP =========
-def main():
-    async def setup():
-        await application.initialize()
-        await application.bot.set_webhook(WEBHOOK_URL)
-
-    loop.run_until_complete(setup())
-
-    flask_app.run(host="0.0.0.0", port=10000)
-
+# ===== START =====
 if __name__ == "__main__":
-    main()
+    asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
+    flask_app.run(host="0.0.0.0", port=10000)
