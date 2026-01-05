@@ -1,5 +1,6 @@
 import os
 import asyncio
+import threading
 import replicate
 from flask import Flask, request
 from telegram import Update
@@ -17,6 +18,10 @@ REPLICATE_API_TOKEN = os.environ["REPLICATE_API_TOKEN"]
 WEBHOOK_URL = os.environ["WEBHOOK_URL"]
 
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
+
+# ===== EVENT LOOP =====
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 # ===== TELEGRAM APP =====
 application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -61,19 +66,31 @@ def health():
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
 
-    asyncio.run(
-        application.process_update(update)
+    asyncio.run_coroutine_threadsafe(
+        application.process_update(update),
+        loop
     )
 
     return "ok", 200
 
 # ===== STARTUP =====
-async def setup():
+async def startup():
     await application.initialize()
     await application.bot.set_webhook(WEBHOOK_URL)
 
+def start_loop():
+    loop.run_forever()
+
 def main():
-    asyncio.run(setup())
+    # запускаем event loop в отдельном потоке
+    threading.Thread(target=start_loop, daemon=True).start()
+
+    # инициализация telegram
+    loop.call_soon_threadsafe(
+        lambda: asyncio.create_task(startup())
+    )
+
+    # запускаем flask
     flask_app.run(host="0.0.0.0", port=10000)
 
 if __name__ == "__main__":
