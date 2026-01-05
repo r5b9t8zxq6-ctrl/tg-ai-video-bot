@@ -42,10 +42,13 @@ async def generate_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             input={"prompt": prompt}
         )[0]
 
-        video = replicate.run(
-            "stability-ai/stable-video-diffusion",
-            input={"input_image": image}
-        )[0]
+        output = replicate.run(
+    "stability-ai/stable-video-diffusion",
+    input={
+        "prompt": prompt,
+        "num_frames": 14
+    }
+)
 
         await update.message.reply_video(video=video)
 
