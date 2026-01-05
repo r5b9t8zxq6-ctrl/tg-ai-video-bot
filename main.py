@@ -32,31 +32,30 @@ async def generate_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ Генерирую видео, подожди...")
 
     try:
-        # 1️⃣ Генерация изображения
+        # 1️⃣ Image
         image = replicate.run(
             "stability-ai/stable-diffusion",
             input={
                 "prompt": prompt,
-                "width": 768,
-                "height": 768
+                "width": 512,
+                "height": 512
             }
         )[0]
 
-        # 2️⃣ Генерация видео из изображения
+        # 2️⃣ Video
         video = replicate.run(
             "stability-ai/stable-video-diffusion",
             input={
                 "input_image": image,
                 "num_frames": 14,
-                "fps": 6,
-                "motion_bucket_id": 127
+                "fps": 6
             }
         )[0]
 
         await update.message.reply_video(video=video)
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка генерации: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {e}")
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_video))
@@ -74,5 +73,14 @@ def webhook():
     asyncio.get_event_loop().create_task(application.process_update(update))
     return "ok", 200
 
-if __name__ == "__main__":
+# ===== STARTUP =====
+async def setup_webhook():
+    await application.bot.set_webhook(WEBHOOK_URL)
+
+def main():
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(setup_webhook())
     flask_app.run(host="0.0.0.0", port=10000)
+
+if __name__ == "__main__":
+    main()
