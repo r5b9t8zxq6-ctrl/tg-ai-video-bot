@@ -1,9 +1,8 @@
 import os
 import replicate
-from flask import Flask, request
-from telegram import Bot, Update
+from telegram import Update
 from telegram.ext import (
-    Application,
+    ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     ContextTypes,
@@ -11,15 +10,10 @@ from telegram.ext import (
 )
 
 # ===== ENV =====
-TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
-REPLICATE_API_TOKEN = os.environ["REPLICATE_API_TOKEN"]
-WEBHOOK_URL = os.environ["WEBHOOK_URL"]
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
-
-# ===== TELEGRAM =====
-application = Application.builder().token(TELEGRAM_TOKEN).build()
-bot = Bot(TELEGRAM_TOKEN)
 
 # ===== HANDLERS =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -32,44 +26,40 @@ async def generate_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ Генерирую видео, подожди...")
 
     try:
+        # 1️⃣ Генерация изображения
         image = replicate.run(
             "stability-ai/sdxl",
-            input={"prompt": prompt}
+            input={
+                "prompt": prompt,
+                "width": 1024,
+                "height": 576
+            }
         )[0]
 
+        # 2️⃣ Видео из изображения
         video = replicate.run(
             "stability-ai/stable-video-diffusion-img2vid",
             input={
                 "input_image": image,
-                "num_frames": 14
+                "motion_bucket_id": 127,
+                "fps": 6
             }
         )[0]
 
         await update.message.reply_video(video=video)
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {e}")
+        await update.message.reply_text(f"❌ Ошибка генерации:\n{e}")
 
-application.add_handler(CommandHandler("start", start))
-application.add_handler(
-    MessageHandler(filters.TEXT & ~filters.COMMAND, generate_video)
-)
+# ===== APP =====
+def main():
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# ===== FLASK =====
-flask_app = Flask(__name__)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_video))
 
-@flask_app.route("/", methods=["GET"])
-def health():
-    return "OK", 200
+    print("🤖 Бот запущен")
+    app.run_polling()
 
-@flask_app.route("/webhook", methods=["POST"])
-async def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    await application.process_update(update)
-    return "ok", 200
-
-# ===== START =====
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
-    flask_app.run(host="0.0.0.0", port=10000)
+    main()
